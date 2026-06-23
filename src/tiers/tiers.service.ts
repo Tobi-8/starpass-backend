@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { EmailService } from '../notifications/email.service';
+import { CreateTierDto } from './dto/create-tier.dto';
 
 @Injectable()
 export class TiersService {
@@ -11,31 +12,6 @@ export class TiersService {
     private emailService: EmailService,
   ) {}
 
-  /**
-   * Find a paginated list of tiers.
-   *
-   * @param page The page number to retrieve.
-   * @param limit The maximum number of tiers per page.
-   * @param creatorId Optional creator id to filter tiers by.
-   * @returns An object containing the list of tiers, total count, page, and limit.
-   */
-  async findAll(page = 1, limit = 20, creatorId?: string) {
-    const where = creatorId ? { creatorId } : {};
-    const skip = (page - 1) * limit;
-
-    const [tiers, total] = await Promise.all([
-      this.prisma.tier.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { onChainId: 'asc' },
-      }),
-      this.prisma.tier.count({ where }),
-    ]);
-
-    return { data: tiers, total, page, limit };
-  }
-
   async findAll(page: number, limit: number, creatorAddress?: string) {
     const skip = (page - 1) * limit;
 
@@ -45,9 +21,7 @@ export class TiersService {
         where: { stellarAddress: creatorAddress },
         select: { id: true },
       });
-      if (!creator) {
-        return { data: [], total: 0, page, limit };
-      }
+      if (!creator) return { data: [], total: 0, page, limit };
       creatorId = creator.id;
     }
 
@@ -86,29 +60,6 @@ export class TiersService {
         }),
       ),
     );
-  }
-
-  async findAll(page: number, limit: number, creatorAddress?: string) {
-    const skip = (page - 1) * limit;
-
-    let creatorId: string | undefined;
-    if (creatorAddress) {
-      const creator = await this.prisma.creator.findUnique({
-        where: { stellarAddress: creatorAddress },
-        select: { id: true },
-      });
-      if (!creator) return { data: [], total: 0, page, limit };
-      creatorId = creator.id;
-    }
-
-    const where = { ...(creatorId ? { creatorId } : {}), active: true };
-
-    const [data, total] = await Promise.all([
-      this.prisma.tier.findMany({ where, skip, take: limit, orderBy: { onChainId: 'asc' } }),
-      this.prisma.tier.count({ where }),
-    ]);
-
-    return { data, total, page, limit };
   }
 
   /**

@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Param, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Param, ParseIntPipe, UseGuards, Request, UseInterceptors, Query, BadRequestException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { CacheTTL } from '@nestjs/cache-manager';
 import { TiersService } from './tiers.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { XCacheInterceptor } from '../common/cache/cache.interceptor';
 
 @ApiTags('tiers')
 @Controller({ path: 'tiers', version: '1' })
@@ -9,6 +11,8 @@ export class TiersController {
   constructor(private tiersService: TiersService) {}
 
   @Get()
+  @UseInterceptors(XCacheInterceptor)
+  @CacheTTL(120)
   @ApiOperation({ summary: 'List tiers with pagination' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })

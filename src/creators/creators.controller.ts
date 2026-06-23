@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete, BadRequestException, ForbiddenException, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete, BadRequestException, ForbiddenException, ValidationPipe, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { CacheTTL } from '@nestjs/cache-manager';
 import { CreatorsService } from './creators.service';
 import { CreateCreatorDto } from './dto/create-creator.dto';
 import { UpdateCreatorDto } from './dto/update-creator.dto';
@@ -9,6 +10,8 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { RegisterWebhookDto } from '../webhooks/dto/register-webhook.dto';
 import { CreatorAnalyticsDto } from './creator-analytics.dto';
 import { BlockFanDto } from './dto/block-fan.dto';
+import { XCacheInterceptor } from '../common/cache/cache.interceptor';
+import { ListEarningsDto } from './dto/list-earnings.dto';
 
 @ApiTags('creators')
 @Controller({ path: 'creators', version: '1' })
@@ -36,6 +39,8 @@ export class CreatorsController {
   }
 
   @Get(':address')
+  @UseInterceptors(XCacheInterceptor)
+  @CacheTTL(300)
   @ApiOperation({ summary: 'Get creator by Stellar address' })
   @ApiResponse({ status: 200, description: 'Return creator profile' })
   @ApiResponse({ status: 404, description: 'Creator not found' })
@@ -62,34 +67,6 @@ export class CreatorsController {
   @ApiResponse({ status: 404, description: 'Creator profile not found' })
   update(@Request() req: any, @Body() dto: UpdateCreatorDto) {
     return this.creatorsService.update(req.user.address, dto);
-  }
-
-  @Post(':id/blocks')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Block a fan from purchasing creator passes' })
-  @ApiResponse({ status: 201, description: 'Fan blocked successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Creator not found' })
-  blockFan(
-    @Param('id') id: string,
-    @Body() dto: BlockFanDto,
-  ) {
-    return this.creatorsService.blockFan(id, dto);
-  }
-
-  @Delete(':id/blocks/:fanAddress')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Unblock a fan for a creator' })
-  @ApiResponse({ status: 200, description: 'Fan unblocked successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Creator not found' })
-  unblockFan(
-    @Param('id') id: string,
-    @Param('fanAddress') fanAddress: string,
-  ) {
-    return this.creatorsService.unblockFan(id, fanAddress);
   }
 
   @Get(':address/earnings')
@@ -171,7 +148,7 @@ export class CreatorsController {
     if (req.user?.sub !== id) {
       throw new ForbiddenException('You can only manage blocks for your own profile');
     }
-    return this.creatorsService.blockFan(id, dto.fanAddress, dto.reason);
+    return this.creatorsService.blockFan(id, dto.fanAddress);
   }
 
   @Delete(':id/blocks/:fanAddress')
