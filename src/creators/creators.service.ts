@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { PrismaService } from '../common/prisma.service';
 import { CreateCreatorDto } from './dto/create-creator.dto';
 import { UpdateCreatorDto } from './dto/update-creator.dto';
@@ -7,7 +8,10 @@ import { ListPayoutsDto } from './dto/list-payouts.dto';
 
 @Injectable()
 export class CreatorsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private cacheManager: any,
+  ) {}
 
   async findFeatured() {
     return this.prisma.creator.findMany({
@@ -38,9 +42,7 @@ export class CreatorsService {
         displayName: dto.displayName,
         bio: dto.bio,
         avatarUrl: dto.avatarUrl,
-        twitterUrl: dto.twitterUrl,
-        instagramUrl: dto.instagramUrl,
-        websiteUrl: dto.websiteUrl,
+
         registeredAt: new Date(),
         user: { connect: { id: userId } },
       },
@@ -50,7 +52,9 @@ export class CreatorsService {
   async update(stellarAddress: string, dto: UpdateCreatorDto) {
     const creator = await this.prisma.creator.findUnique({ where: { stellarAddress } });
     if (!creator) throw new NotFoundException('Creator not found');
-    return this.prisma.creator.update({ where: { id: creator.id }, data: dto });
+    const updated = await this.prisma.creator.update({ where: { id: creator.id }, data: dto });
+    try { await this.cacheManager.del(`creator:${stellarAddress}`); } catch {}
+    return updated;
   }
 
   async getEarnings(stellarAddress: string) {
@@ -299,25 +303,25 @@ export class CreatorsService {
     return Number(average.toFixed(1));
   }
 
-  async blockFan(creatorId: string, fanAddress: string, reason?: string) {
+  async blockFan(creatorId: string, blockedAddress: string) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: creatorId } });
     if (!creator) throw new NotFoundException('Creator not found');
     return this.prisma.block.upsert({
-      where: { creatorId_fanAddress: { creatorId: creator.id, fanAddress } },
-      update: { reason },
-      create: { creatorId: creator.id, fanAddress, reason },
+      where: { creatorId_blockedAddress: { creatorId: creator.id, blockedAddress } },
+      update: {},
+      create: { creatorId: creator.id, blockedAddress },
     });
   }
 
-  async unblockFan(creatorId: string, fanAddress: string) {
+  async unblockFan(creatorId: string, blockedAddress: string) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: creatorId } });
     if (!creator) throw new NotFoundException('Creator not found');
-    await this.prisma.block.deleteMany({ where: { creatorId: creator.id, fanAddress } });
+    await this.prisma.block.deleteMany({ where: { creatorId: creator.id, blockedAddress } });
     return { message: 'Fan unblocked' };
   }
 
-  async isBlocked(creatorId: string, fanAddress: string): Promise<boolean> {
-    const count = await this.prisma.block.count({ where: { creatorId, fanAddress } });
+  async isBlocked(creatorId: string, blockedAddress: string): Promise<boolean> {
+    const count = await this.prisma.block.count({ where: { creatorId, blockedAddress } });
     return count > 0;
   }
 
